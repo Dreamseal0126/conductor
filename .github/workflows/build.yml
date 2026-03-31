@@ -1,4 +1,47 @@
-on: [push, pull_request, workflow_dispatch]
+name: Build ZMK Firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
 jobs:
   build:
-    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@main
+    runs-on: ubuntu-latest
+    container:
+      image: zmkfirmware/zmk-build-arm:stable
+
+    strategy:
+      matrix:
+        include:
+          - shield: monokey_L_rgbled_adapter
+            board: seeeduino_xiao_ble
+            artifact: conductor_left
+          - shield: monokey_R_rgbled_adapter
+            board: seeeduino_xiao_ble
+            artifact: conductor_right
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: West Init
+        run: west init -l config
+
+      - name: West Update
+        run: west update
+
+      - name: West Zephyr Export
+        run: west zephyr-export
+
+      - name: Build
+        run: |
+          west build -s zmk/app -b ${{ matrix.board }} \
+            -- -DSHIELD="${{ matrix.shield }}" \
+               -DZMK_CONFIG="${GITHUB_WORKSPACE}/config"
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: build/zephyr/zmk.uf2
